@@ -1,0 +1,85 @@
+version: '3.7'
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    command: "--loglevel info"
+    container_name: ldapserver
+    hostname: ldapserver
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - ./local/data/slapd/database:/var/lib/ldap
+      - ./local/data/slapd/config:/etc/ldap/slapd.d
+      - ./local/data/certificates:/container/service/slapd/assets/certs
+      - ./local/ldifs:/openldap/ldif
+    environment:
+      - LDAP_ORGANISATION=${LDAP_ORGANISATION}
+      - LDAP_DOMAIN=${LDAP_DOMAIN}
+      - LDAP_ADMIN_USERNAME=${LDAP_ADMIN_USERNAME}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD}
+      - LDAP_CONFIG_PASSWORD=${LDAP_CONFIG_PASSWORD}
+      - LDAP_BASE_DN=${LDAP_BASE_DN}
+      - LDAP_TLS_CRT_FILENAME=${LDAP_TLS_CRT_FILENAME}
+      - LDAP_TLS_KEY_FILENAME=${LDAP_TLS_KEY_FILENAME}
+      - LDAP_TLS_CA_CRT_FILENAME=${LDAP_TLS_CA_CRT_FILENAME}
+      - LDAP_TLS_VERIFY_CLIENT=${LDAP_TLS_VERIFY_CLIENT}
+      - LDAP_READONLY_USER=${LDAP_READONLY_USER}
+      - LDAP_READONLY_USER_USERNAME=${LDAP_READONLY_USER_USERNAME}
+      - LDAP_READONLY_USER_PASSWORD=${LDAP_READONLY_USER_PASSWORD}
+      - LDAP_SEED_INTERNAL_LDIF_PATH=${LDAP_SEED_INTERNAL_LDIF_PATH}
+    networks:
+      - openldap
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    hostname: phpldapadmin
+    ports:
+      - "8000:80"
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=ldapserver
+      - PHPLDAPADMIN_HTTPS=false
+    depends_on:
+      - openldap
+    networks:
+      - openldap
+  postgres:
+    image: postgres:13.2
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRESQL_DB}
+      POSTGRES_USER: ${POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASS}
+    volumes:
+      - ./local/db:/var/lib/postgresql/data
+    networks:
+      - openldap
+  keycloak:
+    depends_on:
+      - postgres
+      - openldap
+    container_name: keycloak
+    hostname: keycloak
+    environment:
+      DB_VENDOR: postgres
+      DB_ADDR: postgres
+      DB_DATABASE: ${POSTGRESQL_DB}
+      DB_USER: ${POSTGRESQL_USER}
+      DB_PASSWORD: ${POSTGRESQL_PASS}
+    image: jboss/keycloak:${KEYCLOAK_VERSION}
+    ports:
+      - "28080:8080"
+      - "28443:8443"
+    volumes:
+      - ./local/keycloak/:/var/lib/keycloak/data
+    restart: unless-stopped
+    networks:
+      - openldap
+volumes:
+  db:
+    driver: local
+networks:
+  openldap:
+    driver: bridge
